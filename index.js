@@ -5,6 +5,11 @@ const c = canvas.getContext("2d")
 canvas.width = window.innerWidth
 canvas.height = window.innerHeight
 
+const scoreEl = document.querySelector("#scoreEl")
+const startGameBtn = document.querySelector("#startGameBtn")
+const modalEl = document.querySelector("#modalEl")
+const bigScoreEl = document.querySelector("#bigScoreEl")
+
 class Player {
   constructor(x, y, radius, color) {
     this.x = x
@@ -67,6 +72,8 @@ class Enemy {
   }
 }
 
+const friction = 0.99
+
 class Particle {
   constructor(x, y, radius, color, velocity) {
     this.x = x
@@ -74,30 +81,46 @@ class Particle {
     this.radius = radius
     this.color = color
     this.velocity = velocity
+    this.alpha = 1
   }
 
   draw() {
+    c.save()
+    c.globalAlpha = this.alpha
     c.beginPath()
     c.arc(this.x, this.y, this.radius, 0, Math.PI * 2, false)
     c.fillStyle = this.color
     c.fill()
+    c.restore()
   }
 
   update() {
     this.draw()
+    this.velocity.x *= friction
+    this.velocity.y *= friction
     this.x = this.x + this.velocity.x
     this.y = this.y + this.velocity.y
+    this.alpha -= 0.01
   }
 }
 
 const x = canvas.width / 2
 const y = canvas.height / 2
 
-const player = new Player(x, y, 10, "white")
+let player = new Player(x, y, 10, "white")
+let projectiles = []
+let enemies = []
+let particles = []
 
-const projectiles = []
-
-const enemies = []
+function init() {
+  player = new Player(x, y, 10, "white")
+  projectiles = []
+  enemies = []
+  particles = []
+  score = 0
+  scoreEl.innerHTML = score
+  bigScoreEl.innerHTML = score
+}
 
 function spawnEnemies() {
   setInterval(() => {
@@ -126,12 +149,21 @@ function spawnEnemies() {
 }
 
 let animationId
+let score = 0
 
 function animate() {
   animationId = requestAnimationFrame(animate)
   c.fillStyle = "rgba(0,0,0, 0.1)"
   c.fillRect(0, 0, canvas.width, canvas.height)
   player.draw()
+
+  particles.forEach((particle, index) => {
+    if (particle.alpha <= 0) {
+      particles.splice(index, 1)
+    } else {
+      particle.update()
+    }
+  })
 
   projectiles.forEach((projectile, index) => {
     projectile.update()
@@ -156,6 +188,8 @@ function animate() {
     // end game
     if (dist - enemy.radius - player.radius < 1) {
       cancelAnimationFrame(animationId)
+      modalEl.style.display = "flex"
+      bigScoreEl.innerHTML = score
     }
 
     projectiles.forEach((projectile, projectileIndex) => {
@@ -163,12 +197,36 @@ function animate() {
 
       // when projectile touch enemy
       if (dist - enemy.radius - projectile.radius < 1) {
+        // create explosions
+        for (let index = 0; index < enemy.radius * 2; index++) {
+          particles.push(
+            new Particle(
+              projectile.x,
+              projectile.y,
+              Math.random() * 2,
+              enemy.color,
+              {
+                x: (Math.random() - 0.5) * (Math.random() * 6),
+                y: (Math.random() - 0.5) * (Math.random() * 6),
+              }
+            )
+          )
+        }
+
         if (enemy.radius - 5 > 10) {
+          // increase our score
+          score += 100
+          scoreEl.innerHTML = score
+
           gsap.to(enemy, { radius: enemy.radius - 10 })
           setTimeout(() => {
             projectiles.splice(projectileIndex, 1)
           }, 0)
         } else {
+          // remove from scena altogether
+          score += 250
+          scoreEl.innerHTML = score
+
           setTimeout(() => {
             enemies.splice(index, 1)
             projectiles.splice(projectileIndex, 1)
@@ -195,5 +253,10 @@ window.addEventListener("click", (event) => {
   )
 })
 
-animate()
-spawnEnemies()
+startGameBtn.addEventListener("click", () => {
+  init()
+  animate()
+  spawnEnemies()
+
+  modalEl.style.display = "none"
+})
